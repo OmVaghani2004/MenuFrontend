@@ -1,4 +1,7 @@
 {
+  "env": {
+    "VITE_API_URL": "http://menubackend.runasp.net"
+  },
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
