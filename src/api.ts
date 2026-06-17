@@ -10,11 +10,14 @@ import type {
   CreateWaiterResponse
 } from './types';
 
-// Allow dynamic API URL configuration, falling back to Vite env variables or localhost default
+// Allow dynamic API URL configuration for local dev only.
+// In production (VITE_API_URL is set), always use the env URL — localStorage cannot override it.
 export const getApiBaseUrl = (): string => {
+  const productionUrl = import.meta.env.VITE_API_URL;
+  if (productionUrl) return productionUrl; // Production: always use env var
   const savedUrl = localStorage.getItem('api_url');
-  if (savedUrl) return savedUrl;
-  return import.meta.env.VITE_API_URL || 'https://localhost:44310';
+  if (savedUrl) return savedUrl; // Local dev: allow localStorage override
+  return 'https://localhost:44310'; // Local dev fallback
 };
 
 export const setApiBaseUrl = (url: string) => {
