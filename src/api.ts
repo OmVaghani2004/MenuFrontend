@@ -10,11 +10,11 @@ import type {
   CreateWaiterResponse
 } from './types';
 
-// Allow dynamic API URL configuration for local dev only.
-// In production (VITE_API_URL is set), always use the env URL — localStorage cannot override it.
+// In production, VITE_API_URL="" (empty) → relative URLs → Vercel proxies to backend.
+// In local dev, VITE_API_URL is undefined → use localStorage or fallback.
 export const getApiBaseUrl = (): string => {
   const productionUrl = import.meta.env.VITE_API_URL;
-  if (productionUrl) return productionUrl; // Production: always use env var
+  if (productionUrl !== undefined) return productionUrl; // "" in prod = relative URLs via Vercel proxy
   const savedUrl = localStorage.getItem('api_url');
   if (savedUrl) return savedUrl; // Local dev: allow localStorage override
   return 'https://localhost:44310'; // Local dev fallback
