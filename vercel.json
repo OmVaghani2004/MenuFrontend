@@ -5,6 +5,14 @@
       "destination": "http://menubackend.runasp.net/api/:path*"
     },
     {
+      "source": "/orderHub",
+      "destination": "http://menubackend.runasp.net/orderHub"
+    },
+    {
+      "source": "/orderHub/:path*",
+      "destination": "http://menubackend.runasp.net/orderHub/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

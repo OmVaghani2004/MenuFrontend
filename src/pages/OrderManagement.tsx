@@ -72,8 +72,6 @@ export const OrderManagement: React.FC = () => {
     const conn = new signalR.HubConnectionBuilder()
       .withUrl(`${base}/orderHub`, {
         accessTokenFactory: () => token,
-        // withCredentials is needed for CORS with credentials
-        withCredentials: true,
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000])
       .configureLogging(signalR.LogLevel.Warning)
