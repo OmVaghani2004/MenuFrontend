@@ -10,6 +10,7 @@ import { OrderManagement } from './pages/OrderManagement';
 import { WaiterManagement } from './pages/WaiterManagement';
 import { Settings } from './pages/Settings';
 import { CustomerMenu } from './pages/CustomerMenu';
+import { LoadingProvider } from './context/LoadingContext';
 
 // Route Guard to check for authentications
 interface GuardProps {
@@ -45,7 +46,8 @@ const GuestGuard: React.FC<{ children: React.ReactElement }> = ({ children }) =>
 
 export const App: React.FC = () => {
   return (
-    <BrowserRouter>
+    <LoadingProvider>
+      <BrowserRouter>
       <Routes>
         
         {/* Public customer-facing menu — no auth required (accessed via QR code) */}
@@ -141,6 +143,7 @@ export const App: React.FC = () => {
 
       </Routes>
     </BrowserRouter>
+  </LoadingProvider>
   );
 };
 

@@ -8,7 +8,8 @@ import {
   Layers,
   Percent,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Eye
 } from 'lucide-react';
 import { api } from '../api';
 import type { DashboardStats, RestaurantInfo } from '../types';
@@ -227,6 +228,17 @@ export const Dashboard: React.FC = () => {
           </a>
           <a href="/tables" className="btn btn-secondary">
             Check Dining Layout
+          </a>
+          {/* Preview the customer-facing menu */}
+          <a
+            href="/menu-view"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', borderColor: 'var(--primary)', color: 'var(--primary)' }}
+          >
+            <Eye size={16} />
+            Preview Customer Menu
           </a>
         </div>
       </div>

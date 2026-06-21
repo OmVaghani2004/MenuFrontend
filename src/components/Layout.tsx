@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -10,10 +10,13 @@ import {
   LogOut, 
   Menu as MenuIcon, 
   Server,
-  User
+  User,
+  Eye
 } from 'lucide-react';
-import { getApiBaseUrl, setApiBaseUrl } from '../api';
+import { getApiBaseUrl, setApiBaseUrl, initApiLoading } from '../api';
 import { Modal } from './Modal';
+import { CookingLoader } from './CookingLoader';
+import { useLoading } from '../context/LoadingContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -25,6 +28,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
   const [apiUrlInput, setApiUrlInput] = useState(getApiBaseUrl());
+  const { isLoading, showLoader, hideLoader } = useLoading();
+
+  // Register callbacks with api.ts once so every fetch drives this overlay
+  useEffect(() => {
+    initApiLoading(showLoader, hideLoader);
+  }, [showLoader, hideLoader]);
 
   const username = localStorage.getItem('username') || 'Administrator';
   const role = localStorage.getItem('role') || 'Staff';
@@ -57,6 +66,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="app-container">
+      {/* Full-screen cooking loader — shown during any API call */}
+      {isLoading && <CookingLoader fullPage message="Preparing your order…" />}
+
       {/* Mobile Sidebar overlay */}
       {isSidebarOpen && (
         <div 
@@ -124,6 +136,19 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               <span>Waiters</span>
             </NavLink>
           )}
+
+          {/* Preview customer menu in new tab */}
+          <a
+            href="/menu-view"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="sidebar-link"
+            onClick={() => setIsSidebarOpen(false)}
+            style={{ color: 'var(--primary)', borderLeft: '2px solid var(--primary)', marginTop: '4px' }}
+          >
+            <Eye size={20} />
+            <span>Preview Menu</span>
+          </a>
 
           <NavLink 
             to="/settings" 

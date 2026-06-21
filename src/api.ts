@@ -10,6 +10,18 @@ import type {
   CreateWaiterResponse
 } from './types';
 
+// ── Global loading callbacks ──────────────────────────────────────────────────
+// Layout calls initApiLoading() once on mount so every request auto-shows/hides
+// the full-screen CookingLoader without any per-page wiring.
+let _showLoader: (() => void) | null = null;
+let _hideLoader: (() => void) | null = null;
+
+export const initApiLoading = (show: () => void, hide: () => void) => {
+  _showLoader = show;
+  _hideLoader = hide;
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 // In production, VITE_API_URL="" (empty) → relative URLs → Vercel proxies to backend.
 // In local dev, VITE_API_URL is undefined → use localStorage or fallback.
 export const getApiBaseUrl = (): string => {
@@ -44,33 +56,38 @@ async function request<T>(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  _showLoader?.();
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
 
-  if (!response.ok) {
-    let errorMessage = 'An error occurred';
-    try {
-      const errorData = await response.json();
-      errorMessage = errorData?.message || errorData?.title || errorMessage;
-    } catch {
+    if (!response.ok) {
+      let errorMessage = 'An error occurred';
       try {
-        errorMessage = await response.text() || errorMessage;
+        const errorData = await response.json();
+        errorMessage = errorData?.message || errorData?.title || errorMessage;
       } catch {
-        // ignore
+        try {
+          errorMessage = await response.text() || errorMessage;
+        } catch {
+          // ignore
+        }
       }
+      throw new Error(errorMessage);
     }
-    throw new Error(errorMessage);
-  }
 
-  // Handle empty responses or plain text
-  const contentType = response.headers.get('Content-Type') || '';
-  if (contentType.includes('application/json')) {
-    return response.json() as Promise<T>;
+    // Handle empty responses or plain text
+    const contentType = response.headers.get('Content-Type') || '';
+    if (contentType.includes('application/json')) {
+      return response.json() as Promise<T>;
+    }
+    
+    return (await response.text()) as unknown as T;
+  } finally {
+    _hideLoader?.();
   }
-  
-  return (await response.text()) as unknown as T;
 }
 
 export const api = {
@@ -147,27 +164,41 @@ export const api = {
   menu: {
     getCategories: () =>
       request<{ success: boolean; data: Category[] }>('api/menu/categories'),
-      
+
+    // categoryId=0 → create, categoryId>0 → update (same endpoint)
     addCategory: (category: Partial<Category>) =>
       request<string>('api/menu/categories', {
         method: 'POST',
         body: JSON.stringify(category),
       }),
-      
+
+    updateCategory: (id: number, categoryName: string) =>
+      request<string>('api/menu/categories', {
+        method: 'POST',
+        body: JSON.stringify({ categoryId: id, categoryName, isActive: true }),
+      }),
+
     deleteCategory: (id: number) =>
       request<string>(`api/menu/categories/${id}`, {
         method: 'DELETE',
       }),
-      
+
     getItems: (categoryId: number) =>
       request<{ success: boolean; data: MenuItem[] }>(`api/menu/items?CategoryID=${categoryId}`),
-      
+
+    // itemId=0 → create, itemId>0 → update (same endpoint)
     addMenuItem: (dto: any) =>
       request<{ success: boolean; menuItemId: number }>('api/menu/items', {
         method: 'POST',
         body: JSON.stringify(dto),
       }),
-      
+
+    updateMenuItem: (dto: any) =>
+      request<{ success: boolean; menuItemId: number }>('api/menu/items', {
+        method: 'POST',
+        body: JSON.stringify(dto),
+      }),
+
     deleteMenuItem: (id: number) =>
       request<string>(`api/menu/items/${id}`, {
         method: 'DELETE',
@@ -190,6 +221,11 @@ export const api = {
     delete: (imageId: number) =>
       request<{ success: boolean; message: string }>(`api/MenuImage/delete/${imageId}`, {
         method: 'DELETE',
+      }),
+
+    setPrimary: (imageId: number) =>
+      request<{ success: boolean; message: string }>(`api/MenuImage/set-primary/${imageId}`, {
+        method: 'PUT',
       }),
   },
 

@@ -1,7 +1,7 @@
 export interface Category {
   categoryId: number;
   categoryName: string;
-  isActive: boolean;
+  isActive?: boolean;  // Not in backend entity — treat as optional
   createdBy?: number;
   createdAt?: string;
   updatedBy?: number;
