@@ -115,14 +115,23 @@ export const TableManagement: React.FC = () => {
     }
   };
 
-  // Generate QR Code URL using QRServer API
+  // Generate QR Code image URL using QRServer API
   const getQrCodeImageUrl = (url: string) => {
     return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&color=090a0f&bgcolor=ffffff&data=${encodeURIComponent(url)}`;
   };
 
+  /**
+   * Build the customer-facing menu URL dynamically from the current deployment's origin.
+   * This avoids the backend's stored FrontendUrl being stale after a redeployment.
+   */
+  const getMenuUrl = (table: Table) => {
+    const origin = window.location.origin;
+    return `${origin}/menu-view?table=${table.tableNumber}&tableId=${table.tableId}`;
+  };
+
   return (
     <div style={{ animation: 'fadeIn 0.3s ease' }}>
-      
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
         <div>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Restaurant Tables</h2>
@@ -164,13 +173,13 @@ export const TableManagement: React.FC = () => {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
           {tables.map((table) => (
-            <div 
-              key={table.tableId} 
-              className="glass-panel glass-panel-interactive" 
-              style={{ 
-                padding: '24px', 
-                display: 'flex', 
-                flexDirection: 'column', 
+            <div
+              key={table.tableId}
+              className="glass-panel glass-panel-interactive"
+              style={{
+                padding: '24px',
+                display: 'flex',
+                flexDirection: 'column',
                 gap: '16px',
                 opacity: table.isActive ? 1 : 0.6
               }}
@@ -199,18 +208,18 @@ export const TableManagement: React.FC = () => {
               </div>
 
               {/* Actions Footer */}
-              <div 
-                style={{ 
+              <div
+                style={{
                   marginTop: '12px',
-                  paddingTop: '16px', 
-                  borderTop: '1px solid var(--border-color)', 
-                  display: 'flex', 
+                  paddingTop: '16px',
+                  borderTop: '1px solid var(--border-color)',
+                  display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center'
                 }}
               >
-                <button 
-                  className="btn btn-secondary btn-sm" 
+                <button
+                  className="btn btn-secondary btn-sm"
                   style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
                   onClick={() => openQrModal(table)}
                 >
@@ -221,7 +230,7 @@ export const TableManagement: React.FC = () => {
                 <div style={{ display: 'flex', gap: '6px' }}>
                   {isOwner && (
                     <>
-                      <button 
+                      <button
                         onClick={() => openEditModal(table)}
                         style={{
                           background: 'none',
@@ -237,7 +246,7 @@ export const TableManagement: React.FC = () => {
                       >
                         <Edit size={16} />
                       </button>
-                      <button 
+                      <button
                         onClick={() => handleDeleteTable(table.tableId)}
                         style={{
                           background: 'none',
@@ -273,9 +282,9 @@ export const TableManagement: React.FC = () => {
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">Table Number (Identifier)</label>
-              <input 
-                type="text" 
-                className="form-input" 
+              <input
+                type="text"
+                className="form-input"
                 placeholder="e.g. 5, 12, T-4"
                 value={tableNumber}
                 onChange={(e) => setTableNumber(e.target.value)}
@@ -284,9 +293,9 @@ export const TableManagement: React.FC = () => {
             </div>
             <div className="form-group">
               <label className="form-label">Table Label / Name</label>
-              <input 
-                type="text" 
-                className="form-input" 
+              <input
+                type="text"
+                className="form-input"
                 placeholder="e.g. Window Corner, Bar-1"
                 value={tableName}
                 onChange={(e) => setTableName(e.target.value)}
@@ -297,8 +306,8 @@ export const TableManagement: React.FC = () => {
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">Guest Capacity</label>
-              <select 
-                className="form-input" 
+              <select
+                className="form-input"
                 value={capacity}
                 onChange={(e) => setCapacity(e.target.value)}
               >
@@ -311,9 +320,9 @@ export const TableManagement: React.FC = () => {
             </div>
             <div className="form-group">
               <label className="form-label">Location Section</label>
-              <input 
-                type="text" 
-                className="form-input" 
+              <input
+                type="text"
+                className="form-input"
                 placeholder="e.g. Patio, Ground Floor, Rooftop"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
@@ -322,10 +331,10 @@ export const TableManagement: React.FC = () => {
           </div>
 
           <label className="form-checkbox" style={{ margin: '8px 0' }}>
-            <input 
-              type="checkbox" 
-              checked={isActive} 
-              onChange={(e) => setIsActive(e.target.checked)} 
+            <input
+              type="checkbox"
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
             />
             <span>Table is active and available for customer checkins</span>
           </label>
@@ -353,26 +362,26 @@ export const TableManagement: React.FC = () => {
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
               Customers can scan this QR code to view the menu and place orders from their phones.
             </p>
-            
-            <div 
-              style={{ 
-                padding: '16px', 
-                backgroundColor: 'white', 
+
+            <div
+              style={{
+                padding: '16px',
+                backgroundColor: 'white',
                 borderRadius: 'var(--radius-md)',
                 boxShadow: 'var(--shadow-md)',
                 border: '1px solid var(--border-color)'
               }}
             >
-              <img 
-                src={getQrCodeImageUrl(selectedTable.qrUrl)} 
-                alt={`QR code for Table ${selectedTable.tableNumber}`} 
+              <img
+                src={getQrCodeImageUrl(getMenuUrl(selectedTable))}
+                alt={`QR code for Table ${selectedTable.tableNumber}`}
                 style={{ width: '220px', height: '220px', display: 'block' }}
               />
             </div>
 
             <div style={{ width: '100%' }}>
-              <div 
-                style={{ 
+              <div
+                style={{
                   backgroundColor: 'rgba(255,255,255,0.02)',
                   border: '1px solid var(--border-color)',
                   borderRadius: 'var(--radius-sm)',
@@ -383,11 +392,11 @@ export const TableManagement: React.FC = () => {
                   marginBottom: '16px'
                 }}
               >
-                {selectedTable.qrUrl}
+                {getMenuUrl(selectedTable)}
               </div>
 
-              <a 
-                href={getQrCodeImageUrl(selectedTable.qrUrl)} 
+              <a
+                href={getQrCodeImageUrl(getMenuUrl(selectedTable))}
                 target="_blank"
                 rel="noreferrer"
                 download={`table_${selectedTable.tableNumber}_qr.png`}
