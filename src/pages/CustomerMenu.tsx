@@ -7,6 +7,9 @@ interface CartItem { menuItemId: number; foodName: string; price: number; quanti
 
 const fmt = (n: number) => `₹${n.toFixed(2)}`;
 
+// localStorage key scoped to the table so different tables stay isolated
+const orderKey = (tableId?: number) => tableId != null ? `active_order_${tableId}` : null;
+
 export const CustomerMenu: React.FC = () => {
   const p = new URLSearchParams(window.location.search);
   const tableNumber = p.get('table') || '';
@@ -22,7 +25,12 @@ export const CustomerMenu: React.FC = () => {
   const [notes,       setNotes]       = useState('');
   const [loading,     setLoading]     = useState(true);
   const [placing,     setPlacing]     = useState(false);
+  // ordered = brief success banner; orderId = persisted open-order reference
   const [ordered,     setOrdered]     = useState(false);
+  const [orderId,     setOrderId]     = useState<number | null>(() => {
+    const key = orderKey(tableId);
+    return key ? Number(localStorage.getItem(key)) || null : null;
+  });
   const [error,       setError]       = useState('');
   const [restName,    setRestName]    = useState('Our Restaurant');
   const catRef = useRef<HTMLDivElement>(null);
@@ -77,21 +85,59 @@ export const CustomerMenu: React.FC = () => {
   const total = cart.reduce((s, c) => s + c.price * c.quantity, 0);
   const count = cart.reduce((s, c) => s + c.quantity, 0);
 
-  const placeOrder = async () => {
+  /**
+   * Single submission handler:
+   * – If an open orderId is stored → try editOrder (add to existing).
+   * – If backend rejects it (paid/cancelled) OR no orderId → fall back to placeOrder.
+   * The customer never sees or chooses between the two paths.
+   */
+  const submitCart = async () => {
     if (!cart.length) return;
+    setPlacing(true); setError('');
+    const items = cart.map(c => ({ menuItemId: c.menuItemId, quantity: c.quantity }));
+    const notesVal = notes.trim() || undefined;
+
     try {
-      setPlacing(true); setError('');
-      await api.orders.place({
+      // ── Path A: add to existing open order ───────────────────────────────────
+      if (orderId) {
+        try {
+          await api.orders.editOrder(orderId, { items, notes: notesVal });
+          setCart([]); setCartOpen(false); setNotes('');
+          flashSuccess();
+          return;
+        } catch {
+          // Backend rejected (order paid/cancelled) → clear stored id and fall through
+          const key = orderKey(tableId);
+          if (key) localStorage.removeItem(key);
+          setOrderId(null);
+        }
+      }
+
+      // ── Path B: place a fresh order ───────────────────────────────────────────
+      const res = await api.orders.place({
         tableId: tableId ?? null,
         customerName: name.trim() || null,
         customerPhone: null,
-        notes: notes.trim() || null,
-        items: cart.map(c => ({ menuItemId: c.menuItemId, quantity: c.quantity })),
+        notes: notesVal ?? null,
+        items,
       });
-      setOrdered(true); setCart([]); setCartOpen(false);
+      const newId = res.data?.orderId ?? null;
+      setOrderId(newId);
+      if (newId) {
+        const key = orderKey(tableId);
+        if (key) localStorage.setItem(key, String(newId));
+      }
+      setCart([]); setCartOpen(false); setNotes('');
+      flashSuccess();
     } catch (e: any) {
       setError(e?.message || 'Failed to place order.');
     } finally { setPlacing(false); }
+  };
+
+  /** Show the success banner for 2 seconds then return to the menu. */
+  const flashSuccess = () => {
+    setOrdered(true);
+    setTimeout(() => setOrdered(false), 2000);
   };
 
   const visible = allItems.filter(item => {
@@ -101,15 +147,15 @@ export const CustomerMenu: React.FC = () => {
     return true;
   });
 
-  // ── SUCCESS ──────────────────────────────────────────────────────────────────
+  // ── SUCCESS BANNER (auto-dismisses, no buttons, customer stays on the page) ──
   if (ordered) return (
     <div style={S.lightPage}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: 16, padding: 32, textAlign: 'center' }}>
-        <div style={{ fontSize: '5rem' }}>🎉</div>
-        <h1 style={{ fontSize: '2rem', fontWeight: 900, color: '#1a1a1a' }}>Order Placed!</h1>
-        <p style={{ color: '#666', fontSize: '1rem' }}>Your order is heading to the kitchen.</p>
+        <div style={{ fontSize: '5rem' }}>✅</div>
+        <h1 style={{ fontSize: '2rem', fontWeight: 900, color: '#1a1a1a' }}>Items Sent!</h1>
+        <p style={{ color: '#666', fontSize: '1rem' }}>Your order has been updated. The kitchen is on it!</p>
         {tableNumber && <p style={{ fontWeight: 700, color: '#b8860b' }}>Table {tableNumber}</p>}
-        <button onClick={() => setOrdered(false)} style={S.goldBtn}>Order More</button>
+        <p style={{ color: '#bbb', fontSize: '0.82rem', marginTop: 4 }}>Returning to menu…</p>
       </div>
     </div>
   );
@@ -255,8 +301,8 @@ export const CustomerMenu: React.FC = () => {
                   <p style={{ margin: 0, fontSize: '0.75rem', color: '#888' }}>Total</p>
                   <p style={{ margin: 0, fontWeight: 900, fontSize: '1.5rem', color: '#1a1a1a' }}>{fmt(total)}</p>
                 </div>
-                <button onClick={placeOrder} disabled={placing} style={{ ...S.goldBtn, opacity: placing ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {placing ? 'Placing…' : <><Send size={16} /> Place Order</>}
+                <button onClick={submitCart} disabled={placing} style={{ ...S.goldBtn, opacity: placing ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {placing ? 'Sending…' : <><Send size={16} /> {orderId ? 'Add to Order' : 'Place Order'}</>}
                 </button>
               </div>
             )}

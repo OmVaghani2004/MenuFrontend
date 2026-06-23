@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Bell, Receipt, CreditCard, Play, CheckCircle, XCircle, Filter, Calendar, AlertCircle, DollarSign, RefreshCw, MessageSquare, Grid3X3 } from 'lucide-react';
+import { Bell, Receipt, CreditCard, Play, CheckCircle, XCircle, Filter, Calendar, AlertCircle, DollarSign, RefreshCw, MessageSquare, Grid3X3, PenLine, Plus } from 'lucide-react';
 import * as signalR from '@microsoft/signalr';
 import { api, getApiBaseUrl } from '../api';
-import type { Order, Table } from '../types';
+import type { Order, Table, MenuItem } from '../types';
 import { Modal } from '../components/Modal';
 
 export const OrderManagement: React.FC = () => {
@@ -23,12 +23,22 @@ export const OrderManagement: React.FC = () => {
   const [isBillingOpen, setIsBillingOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [paymentMode, setPaymentMode] = useState('Cash');
+  const [payError, setPayError] = useState('');
+  const [paying, setPaying] = useState(false);
+
+  // Edit Order Modal
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editOrder, setEditOrder] = useState<Order | null>(null);
+  const [editItemId, setEditItemId] = useState<number | ''>('');
+  const [editQty, setEditQty] = useState('1');
+  const [editNotes, setEditNotes] = useState('');
 
   // History
   const [historyOrders, setHistoryOrders] = useState<Order[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toLocaleString('default', { month: 'long' }));
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [allMenuItems, setAllMenuItems] = useState<MenuItem[]>([]);
 
   const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -47,14 +57,22 @@ export const OrderManagement: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true); setError('');
-      const [tablesRes, ordersRes] = await Promise.all([
+      const [tablesRes, ordersRes, catRes] = await Promise.all([
         api.tables.getAll(),
         api.orders.getKitchen(),
+        api.menu.getCategories(),
       ]);
       if (tablesRes.success && tablesRes.data) setTables(tablesRes.data);
       if (ordersRes.success && ordersRes.data) {
         const sorted = [...ordersRes.data].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setOrders(sorted);
+      }
+      // Load all menu items for the edit-order dropdown
+      if (catRes.success && catRes.data) {
+        const results = await Promise.all(
+          catRes.data.map((c: any) => api.menu.getItems(c.categoryId).then(r => r.data ?? []).catch(() => [] as MenuItem[]))
+        );
+        setAllMenuItems(results.flat());
       }
     } catch (e: any) {
       setError(e?.message || 'Failed to load orders.');
@@ -127,17 +145,49 @@ export const OrderManagement: React.FC = () => {
   };
 
   const openBilling = (order: Order) => {
-    setSelectedOrder(order); setPaymentMode('Cash'); setIsBillingOpen(true);
+    setSelectedOrder(order); setPaymentMode('Cash'); setPayError(''); setIsBillingOpen(true);
   };
 
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrder) return;
     try {
-      await api.orders.markPaid(selectedOrder.orderId, paymentMode);
+      setPaying(true); setPayError('');
+      const res = await api.orders.markPaid(selectedOrder.orderId, paymentMode);
+
+      // Use the full order returned by the server to update state (totalAmount may differ)
+      const paid = res.data ?? { ...selectedOrder, isPaid: true, paymentMode };
+      setOrders(prev => prev.map(o => o.orderId === selectedOrder.orderId ? paid : o));
+
+      // Clear the customer-side localStorage entry so their next QR scan starts a fresh order
+      if (selectedOrder.tableId != null) {
+        localStorage.removeItem(`active_order_${selectedOrder.tableId}`);
+      }
+
       setIsBillingOpen(false);
-      setOrders(prev => prev.map(o => o.orderId === selectedOrder.orderId ? { ...o, isPaid: true, paymentMode } : o));
-    } catch (e: any) { alert(e?.message || 'Payment failed.'); }
+    } catch (e: any) {
+      // Show the server's error message inline in the modal instead of an alert
+      setPayError(e?.message || 'Payment failed. Please try again.');
+    } finally { setPaying(false); }
+  };
+
+  const openEditOrder = (order: Order) => {
+    setEditOrder(order); setEditItemId(''); setEditQty('1'); setEditNotes(order.notes || ''); setIsEditOpen(true);
+  };
+
+  const handleEditOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editOrder || editItemId === '') return;
+    try {
+      const res = await api.orders.editOrder(editOrder.orderId, {
+        items: [{ menuItemId: Number(editItemId), quantity: parseInt(editQty) || 1 }],
+        notes: editNotes.trim() || undefined,
+      });
+      if (res.success && res.data) {
+        setOrders(prev => prev.map(o => o.orderId === editOrder.orderId ? res.data : o));
+      }
+      setIsEditOpen(false);
+    } catch (e: any) { alert(e?.message || 'Failed to edit order.'); }
   };
 
   const getNextAction = (status: string) => {
@@ -230,6 +280,9 @@ export const OrderManagement: React.FC = () => {
                 {action.icon}<span>{action.text}</span>
               </button>
             )}
+            <button className="btn btn-secondary" style={{ padding: '7px 10px' }} title="Add Items to Order" onClick={() => openEditOrder(order)}>
+              <PenLine size={14} />
+            </button>
             <button className="btn btn-secondary" style={{ padding: '7px 10px' }} title="Collect Payment" onClick={() => openBilling(order)}>
               <Receipt size={14} />
             </button>
@@ -434,8 +487,9 @@ export const OrderManagement: React.FC = () => {
         <form onSubmit={handlePay} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ backgroundColor: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '16px', textAlign: 'center' }}>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Amount to Collect</p>
-            <h2 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--primary)' }}>${selectedOrder?.totalAmount.toFixed(2)}</h2>
+            <h2 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--primary)' }}>₹{selectedOrder?.totalAmount.toFixed(2)}</h2>
             {selectedOrder?.tableNumber && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>Table: {selectedOrder.tableNumber}</p>}
+            {selectedOrder?.customerName && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Customer: {selectedOrder.customerName}</p>}
           </div>
           <div className="form-group">
             <label className="form-label">Payment Mode</label>
@@ -446,9 +500,65 @@ export const OrderManagement: React.FC = () => {
               <option value="Wallet">Mobile Wallet</option>
             </select>
           </div>
+          {/* Inline error — no alert() popup */}
+          {payError && (
+            <div style={{ backgroundColor: 'var(--danger-glow)', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', fontSize: '0.85rem' }}>
+              {payError}
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-            <button type="button" className="btn btn-secondary" onClick={() => setIsBillingOpen(false)}>Cancel</button>
-            <button type="submit" className="btn btn-primary" style={{ backgroundColor: 'var(--success)' }}>Confirm Payment</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setIsBillingOpen(false)} disabled={paying}>Cancel</button>
+            <button type="submit" className="btn btn-primary" style={{ backgroundColor: 'var(--success)' }} disabled={paying}>
+              {paying ? 'Processing…' : 'Confirm Payment'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Order Modal */}
+      <Modal isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} title={`Add Items: ${editOrder?.orderNumber}`} size="sm">
+        <form onSubmit={handleEditOrder} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+            Select a menu item to append to this order. If the item is already in the order its quantity will be increased.
+          </p>
+          <div className="form-group">
+            <label className="form-label">Menu Item</label>
+            <select
+              className="form-input"
+              value={editItemId}
+              onChange={e => setEditItemId(e.target.value === '' ? '' : Number(e.target.value))}
+              required
+            >
+              <option value="">— Select item —</option>
+              {allMenuItems.filter(m => !m.soldOut).map(m => (
+                <option key={m.itemId} value={m.itemId}>{m.foodName} (₹{m.price})</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Quantity</label>
+            <input
+              type="number"
+              className="form-input"
+              min={1}
+              value={editQty}
+              onChange={e => setEditQty(e.target.value)}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Notes (optional — replaces existing notes)</label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="e.g. extra spicy, no onion"
+              value={editNotes}
+              onChange={e => setEditNotes(e.target.value)}
+            />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <button type="button" className="btn btn-secondary" onClick={() => setIsEditOpen(false)}>Cancel</button>
+            <button type="submit" className="btn btn-primary"><Plus size={15} /><span>Add Item</span></button>
           </div>
         </form>
       </Modal>

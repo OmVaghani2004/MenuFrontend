@@ -273,9 +273,15 @@ export const api = {
       }),
       
     markPaid: (orderId: number, paymentMode: string) =>
-      request<{ success: boolean; message: string }>(`api/Order/${orderId}/pay`, {
+      request<{ success: boolean; message: string; data: Order }>(`api/Order/${orderId}/pay`, {
         method: 'PUT',
         body: JSON.stringify({ paymentMode }),
+      }),
+
+    editOrder: (orderId: number, dto: { items: { menuItemId: number; quantity: number }[]; notes?: string }) =>
+      request<{ success: boolean; data: Order; message: string }>(`api/Order/${orderId}/edit`, {
+        method: 'PUT',
+        body: JSON.stringify(dto),
       }),
   },
 };
