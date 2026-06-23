@@ -88,8 +88,8 @@ export const CustomerMenu: React.FC = () => {
   /**
    * Single submission handler:
    * – If an open orderId is stored → try editOrder (add to existing).
-   * – If backend rejects it (paid/cancelled) OR no orderId → fall back to placeOrder.
-   * The customer never sees or chooses between the two paths.
+   * – Only falls back to placeOrder if the backend explicitly rejects because
+   *   the order is paid/cancelled. Any other error is shown to the user.
    */
   const submitCart = async () => {
     if (!cart.length) return;
@@ -98,22 +98,40 @@ export const CustomerMenu: React.FC = () => {
     const notesVal = notes.trim() || undefined;
 
     try {
-      // ── Path A: add to existing open order ───────────────────────────────────
+      // ── Path A: add items to the existing open order ──────────────────────────
       if (orderId) {
+        console.log('[CustomerMenu] editOrder → orderId:', orderId, 'items:', items);
         try {
           await api.orders.editOrder(orderId, { items, notes: notesVal });
           setCart([]); setCartOpen(false); setNotes('');
           flashSuccess();
-          return;
-        } catch {
-          // Backend rejected (order paid/cancelled) → clear stored id and fall through
+          return; // ← done, no placeOrder
+        } catch (editErr: any) {
+          const msg: string = editErr?.message ?? '';
+          console.warn('[CustomerMenu] editOrder failed:', msg);
+
+          // Only clear & fall back when the backend says the order is closed.
+          // For any other error (network, server crash, etc.) surface it to the user.
+          const orderClosed =
+            msg.toLowerCase().includes('paid') ||
+            msg.toLowerCase().includes('cancel') ||
+            msg.toLowerCase().includes('not found');
+
+          if (!orderClosed) {
+            // Transient error — show it, keep orderId intact, let user retry
+            setError(msg || 'Failed to add items. Please try again.');
+            return;
+          }
+
+          // Order is genuinely closed → clear stale id and fall through to new order
           const key = orderKey(tableId);
           if (key) localStorage.removeItem(key);
           setOrderId(null);
         }
       }
 
-      // ── Path B: place a fresh order ───────────────────────────────────────────
+      // ── Path B: place a brand-new order ──────────────────────────────────────
+      console.log('[CustomerMenu] placeOrder → new order for table:', tableId);
       const res = await api.orders.place({
         tableId: tableId ?? null,
         customerName: name.trim() || null,
@@ -121,7 +139,9 @@ export const CustomerMenu: React.FC = () => {
         notes: notesVal ?? null,
         items,
       });
+
       const newId = res.data?.orderId ?? null;
+      console.log('[CustomerMenu] placeOrder response orderId:', newId);
       setOrderId(newId);
       if (newId) {
         const key = orderKey(tableId);
@@ -131,7 +151,9 @@ export const CustomerMenu: React.FC = () => {
       flashSuccess();
     } catch (e: any) {
       setError(e?.message || 'Failed to place order.');
-    } finally { setPlacing(false); }
+    } finally {
+      setPlacing(false);
+    }
   };
 
   /** Show the success banner for 2 seconds then return to the menu. */
