@@ -154,15 +154,10 @@ export const OrderManagement: React.FC = () => {
     try {
       setPaying(true); setPayError('');
 
-      // If the order is still in Ready state, mark it Completed first
-      if (selectedOrder.status === 'Ready') {
-        await api.orders.updateStatus(selectedOrder.orderId, 'Completed');
-      }
-
       const res = await api.orders.markPaid(selectedOrder.orderId, paymentMode);
 
       // Use the full order returned by the server to update state
-      const paid = res.data ?? { ...selectedOrder, status: 'Completed', isPaid: true, paymentMode };
+      const paid = res.data ?? { ...selectedOrder, status: 'Served', isPaid: true, paymentMode };
       setOrders(prev => prev.map(o => o.orderId === selectedOrder.orderId ? paid : o));
 
       // Clear the customer-side localStorage so their next QR scan starts fresh
@@ -209,7 +204,8 @@ export const OrderManagement: React.FC = () => {
       case 'Pending':   return 'badge-danger';
       case 'Preparing': return 'badge-warning';
       case 'Ready':     return 'badge-info';
-      case 'Completed': return 'badge-success';
+      case 'Completed':
+      case 'Served':    return 'badge-success';
       default: return 'badge-secondary';
     }
   };
@@ -307,8 +303,8 @@ export const OrderManagement: React.FC = () => {
               <PenLine size={14} />
             </button>
 
-            {/* Cancel — not shown for Completed/Cancelled */}
-            {order.status !== 'Completed' && order.status !== 'Cancelled' && (
+            {/* Cancel — not shown for Completed/Served/Cancelled */}
+            {order.status !== 'Completed' && order.status !== 'Served' && order.status !== 'Cancelled' && (
               <button
                 className="btn btn-danger"
                 style={{ padding: '7px 10px' }}
