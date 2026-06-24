@@ -153,20 +153,25 @@ export const OrderManagement: React.FC = () => {
     if (!selectedOrder) return;
     try {
       setPaying(true); setPayError('');
+
+      // If the order is still in Ready state, mark it Completed first
+      if (selectedOrder.status === 'Ready') {
+        await api.orders.updateStatus(selectedOrder.orderId, 'Completed');
+      }
+
       const res = await api.orders.markPaid(selectedOrder.orderId, paymentMode);
 
-      // Use the full order returned by the server to update state (totalAmount may differ)
-      const paid = res.data ?? { ...selectedOrder, isPaid: true, paymentMode };
+      // Use the full order returned by the server to update state
+      const paid = res.data ?? { ...selectedOrder, status: 'Completed', isPaid: true, paymentMode };
       setOrders(prev => prev.map(o => o.orderId === selectedOrder.orderId ? paid : o));
 
-      // Clear the customer-side localStorage entry so their next QR scan starts a fresh order
+      // Clear the customer-side localStorage so their next QR scan starts fresh
       if (selectedOrder.tableId != null) {
         localStorage.removeItem(`active_order_${selectedOrder.tableId}`);
       }
 
       setIsBillingOpen(false);
     } catch (e: any) {
-      // Show the server's error message inline in the modal instead of an alert
       setPayError(e?.message || 'Payment failed. Please try again.');
     } finally { setPaying(false); }
   };
@@ -192,9 +197,9 @@ export const OrderManagement: React.FC = () => {
 
   const getNextAction = (status: string) => {
     switch (status) {
-      case 'Pending':   return { text: 'Start Prep',     next: 'Preparing', icon: <Play size={13} /> };
-      case 'Preparing': return { text: 'Mark Ready',     next: 'Ready',     icon: <CheckCircle size={13} /> };
-      case 'Ready':     return { text: 'Mark Completed', next: 'Completed', icon: <CheckCircle size={13} /> };
+      case 'Pending':   return { text: 'Start Prep',  next: 'Preparing', icon: <Play size={13} /> };
+      case 'Preparing': return { text: 'Mark Ready',   next: 'Ready',     icon: <CheckCircle size={13} /> };
+      // 'Ready' is handled separately — it opens the payment modal (no direct status jump)
       default: return null;
     }
   };
@@ -274,21 +279,42 @@ export const OrderManagement: React.FC = () => {
         {/* Actions */}
         {!order.isPaid && (
           <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+
+            {/* Pending / Preparing — simple status advance */}
             {action && (
-              <button className="btn btn-primary" style={{ flexGrow: 1, padding: '7px 10px', fontSize: '0.8rem' }}
-                onClick={() => handleUpdateStatus(order.orderId, action.next)}>
+              <button
+                className="btn btn-primary"
+                style={{ flexGrow: 1, padding: '7px 10px', fontSize: '0.8rem' }}
+                onClick={() => handleUpdateStatus(order.orderId, action.next)}
+              >
                 {action.icon}<span>{action.text}</span>
               </button>
             )}
+
+            {/* Ready — opens payment modal which also marks Completed */}
+            {order.status === 'Ready' && (
+              <button
+                className="btn btn-primary"
+                style={{ flexGrow: 1, padding: '7px 10px', fontSize: '0.8rem', backgroundColor: 'var(--success)' }}
+                onClick={() => openBilling(order)}
+              >
+                <CheckCircle size={13} /><span>Mark Completed &amp; Pay</span>
+              </button>
+            )}
+
+            {/* Add items to order (pencil) */}
             <button className="btn btn-secondary" style={{ padding: '7px 10px' }} title="Add Items to Order" onClick={() => openEditOrder(order)}>
               <PenLine size={14} />
             </button>
-            <button className="btn btn-secondary" style={{ padding: '7px 10px' }} title="Collect Payment" onClick={() => openBilling(order)}>
-              <Receipt size={14} />
-            </button>
+
+            {/* Cancel — not shown for Completed/Cancelled */}
             {order.status !== 'Completed' && order.status !== 'Cancelled' && (
-              <button className="btn btn-danger" style={{ padding: '7px 10px' }} title="Cancel"
-                onClick={() => { if (window.confirm('Cancel this order?')) handleUpdateStatus(order.orderId, 'Cancelled'); }}>
+              <button
+                className="btn btn-danger"
+                style={{ padding: '7px 10px' }}
+                title="Cancel"
+                onClick={() => { if (window.confirm('Cancel this order?')) handleUpdateStatus(order.orderId, 'Cancelled'); }}
+              >
                 <XCircle size={14} />
               </button>
             )}
