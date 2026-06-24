@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Clipboard, Check, AlertCircle, Calendar, ShieldAlert } from 'lucide-react';
+import { Users, UserPlus, Clipboard, Check, AlertCircle, Calendar, ShieldAlert, Edit2, Trash2 } from 'lucide-react';
 import { api } from '../api';
 import type { Waiter, CreateWaiterResponse } from '../types';
 import { Modal } from '../components/Modal';
@@ -14,6 +14,13 @@ export const WaiterManagement: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isRevealModalOpen, setIsRevealModalOpen] = useState(false);
   const [newWaiterCreds, setNewWaiterCreds] = useState<CreateWaiterResponse | null>(null);
+
+  // Edit State
+  const [isEditModalOpen, setIsEditOpen] = useState(false);
+  const [selectedWaiter, setSelectedWaiter] = useState<Waiter | null>(null);
+  const [editUsername, setEditUsername] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPassword, setEditPassword] = useState('');
 
   // Form Fields
   const [username, setUsername] = useState('');
@@ -65,6 +72,48 @@ export const WaiterManagement: React.FC = () => {
       setError(err?.message || 'Failed to create waiter profile.');
     } finally {
       setSubmitLoading(false);
+    }
+  };
+
+  const handleEditWaiter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedWaiter) return;
+    if (!editUsername.trim() || !editEmail.trim()) return;
+
+    setError('');
+    setSubmitLoading(true);
+
+    try {
+      const payload: any = { username: editUsername, email: editEmail };
+      if (editPassword.trim()) {
+        payload.password = editPassword;
+      }
+      const res = await api.auth.updateWaiter(selectedWaiter.waiterId, payload);
+      if (res.success) {
+        setIsEditOpen(false);
+        setEditPassword('');
+        loadWaiters();
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to update waiter profile.');
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  const handleDeleteWaiter = async (id: number) => {
+    if (!window.confirm('Are you sure you want to delete this waiter account? This action cannot be undone.')) return;
+    
+    setError('');
+    setLoading(true);
+    try {
+      const res = await api.auth.deleteWaiter(id);
+      if (res.success) {
+        loadWaiters();
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to delete waiter account.');
+      setLoading(false);
     }
   };
 
@@ -124,6 +173,7 @@ export const WaiterManagement: React.FC = () => {
                 <th>Email Address</th>
                 <th>Account Type</th>
                 <th>Created Date</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -141,6 +191,32 @@ export const WaiterManagement: React.FC = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <Calendar size={14} style={{ color: 'var(--text-muted)' }} />
                       <span>{new Date(waiter.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: '6px 10px' }}
+                        title="Edit Waiter"
+                        onClick={() => {
+                          setSelectedWaiter(waiter);
+                          setEditUsername(waiter.username);
+                          setEditEmail(waiter.email);
+                          setEditPassword('');
+                          setIsEditOpen(true);
+                        }}
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        className="btn btn-danger"
+                        style={{ padding: '6px 10px' }}
+                        title="Delete Waiter"
+                        onClick={() => handleDeleteWaiter(waiter.waiterId)}
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -276,6 +352,63 @@ export const WaiterManagement: React.FC = () => {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Edit Waiter Modal */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditOpen(false)}
+        title="Edit Waiter Account"
+      >
+        <form onSubmit={handleEditWaiter} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="form-group">
+            <label className="form-label">Waiter Username</label>
+            <input 
+              type="text" 
+              className="form-input" 
+              value={editUsername}
+              onChange={(e) => setEditUsername(e.target.value)}
+              minLength={3}
+              maxLength={50}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Waiter Email</label>
+            <input 
+              type="email" 
+              className="form-input" 
+              value={editEmail}
+              onChange={(e) => setEditEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Reset Password (Optional)</label>
+            <input 
+              type="password" 
+              className="form-input" 
+              placeholder="Leave blank to keep current"
+              value={editPassword}
+              onChange={(e) => setEditPassword(e.target.value)}
+              minLength={6}
+            />
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Minimum 6 characters
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+            <button type="button" className="btn btn-secondary" onClick={() => setIsEditOpen(false)}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={submitLoading}>
+              {submitLoading ? <div className="spinner" /> : 'Save Changes'}
+            </button>
+          </div>
+        </form>
       </Modal>
 
     </div>

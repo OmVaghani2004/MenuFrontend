@@ -140,6 +140,17 @@ export const api = {
       
     getWaiters: () =>
       request<{ success: boolean; data: Waiter[] }>('api/auth/waiters'),
+
+    updateWaiter: (id: number, dto: { username: string; email: string; password?: string }) =>
+      request<{ success: boolean; message: string }>(`api/auth/waiters/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(dto),
+      }),
+
+    deleteWaiter: (id: number) =>
+      request<{ success: boolean; message: string }>(`api/auth/waiters/${id}`, {
+        method: 'DELETE',
+      }),
   },
 
   // Restaurant settings & onboarding
