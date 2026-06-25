@@ -34,6 +34,7 @@ export const Settings: React.FC = () => {
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [zipCode, setZipCode] = useState('');
+  const [openingHours, setOpeningHours] = useState('');
 
   // Load configuration details
   const loadSettingsData = async () => {
@@ -61,6 +62,7 @@ export const Settings: React.FC = () => {
           setCity(restRes.data.city || '');
           setState(restRes.data.state || '');
           setZipCode(restRes.data.zipCode || '');
+          setOpeningHours(restRes.data.openingHours || '');
         }
       } catch (err) {
         console.warn('Restaurant info not set up yet.', err);
@@ -127,6 +129,7 @@ export const Settings: React.FC = () => {
         city: city || undefined,
         state: state || undefined,
         zipCode: zipCode || undefined,
+        openingHours: openingHours || undefined,
       };
 
       await api.restaurant.updateInfo(dto);
@@ -366,6 +369,18 @@ export const Settings: React.FC = () => {
                     disabled={!isOwner}
                   />
                 </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Opening Hours</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  value={openingHours}
+                  onChange={(e) => setOpeningHours(e.target.value)}
+                  placeholder="e.g. Mon-Fri: 9:00 AM - 10:00 PM, Sat-Sun: 10:00 AM - 11:00 PM"
+                  disabled={!isOwner}
+                />
               </div>
 
               <div className="form-group">

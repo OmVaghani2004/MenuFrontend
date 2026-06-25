@@ -33,6 +33,7 @@ export const CustomerMenu: React.FC = () => {
   });
   const [error,       setError]       = useState('');
   const [restName,    setRestName]    = useState('Our Restaurant');
+  const [openingHours, setOpeningHours] = useState('');
   const catRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,7 +44,10 @@ export const CustomerMenu: React.FC = () => {
           api.restaurant.getInfo().catch(() => ({ success: false, data: null } as any)),
           api.menu.getCategories(),
         ]);
-        if (restRes.success && restRes.data) setRestName(restRes.data.restaurantName);
+        if (restRes.success && restRes.data) {
+          setRestName(restRes.data.restaurantName);
+          if (restRes.data.openingHours) setOpeningHours(restRes.data.openingHours);
+        }
 
         if (catRes.success && catRes.data?.length) {
           // Category entity has no isActive field — show all returned categories
@@ -189,7 +193,11 @@ export const CustomerMenu: React.FC = () => {
       <header style={S.header}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#1a1a1a', margin: 0 }}>{restName}</h1>
-          {tableNumber && <p style={{ margin: 0, fontSize: '0.8rem', color: '#888' }}>Table {tableNumber}</p>}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+            {tableNumber && <p style={{ margin: 0, fontSize: '0.8rem', color: '#888' }}>Table {tableNumber}</p>}
+            {tableNumber && openingHours && <span style={{ color: '#ccc', fontSize: '0.8rem' }}>•</span>}
+            {openingHours && <p style={{ margin: 0, fontSize: '0.8rem', color: '#888' }}>{openingHours}</p>}
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={S.searchBox}>

@@ -95,6 +95,7 @@ export interface RestaurantInfo {
   city?: string;
   state?: string;
   zipCode?: string;
+  openingHours?: string;
 }
 
 export interface UserProfile {
