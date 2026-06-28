@@ -121,11 +121,17 @@ export const TableManagement: React.FC = () => {
   };
 
   /**
-   * Build the customer-facing menu URL dynamically from the current deployment's origin.
-   * This avoids the backend's stored FrontendUrl being stale after a redeployment.
+   * Build the customer-facing menu URL using the table's opaque QrToken.
+   * The token is a random 32-char hex string — no internal IDs are exposed.
+   * Scanning a tampered/unknown token returns a 404 from the backend.
    */
   const getMenuUrl = (table: Table) => {
     const origin = window.location.origin;
+    // Use qrToken if available (post-migration), fall back to legacy format only for display
+    if (table.qrToken) {
+      return `${origin}/menu-view?token=${table.qrToken}`;
+    }
+    // Fallback for tables that existed before the migration (no qrToken yet)
     return `${origin}/menu-view?table=${table.tableNumber}&tableId=${table.tableId}`;
   };
 

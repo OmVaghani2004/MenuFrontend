@@ -43,6 +43,8 @@ export interface Table {
   capacity: number;
   isActive: boolean;
   qrUrl: string;
+  /** Opaque token used in QR code URLs instead of the raw tableId */
+  qrToken: string;
   tableStatus: 'Empty' | 'Occupied' | 'Pending' | string;
   activeOrderId?: number;
   createdAt: string;
@@ -72,6 +74,8 @@ export interface Order {
   items: OrderItem[];
   createdAt: string;
   updatedAt?: string;
+  /** Returned only on PlaceOrder — the customer must store this and send it back on EditOrder */
+  editToken?: string;
 }
 
 export interface DashboardStats {

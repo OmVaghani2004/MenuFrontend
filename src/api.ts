@@ -244,17 +244,27 @@ export const api = {
   tables: {
     getAll: () =>
       request<{ success: boolean; data: Table[] }>('api/Table'),
-      
+
     createOrUpdate: (dto: any) =>
       request<{ success: boolean; message: string }>('api/Table', {
         method: 'POST',
         body: JSON.stringify(dto),
       }),
-      
+
     delete: (id: number) =>
       request<{ success: boolean; message: string }>(`api/Table/${id}`, {
         method: 'DELETE',
       }),
+
+    /**
+     * Resolves an opaque QR token to the table it belongs to.
+     * Called by CustomerMenu on mount — the QR code only contains the token,
+     * never the raw tableId.
+     */
+    resolveToken: (token: string) =>
+      request<{ success: boolean; data: { tableId: number; tableNumber: string } }>(
+        `api/Table/resolve?token=${encodeURIComponent(token)}`
+      ),
   },
 
   // Orders
@@ -289,7 +299,7 @@ export const api = {
         body: JSON.stringify({ paymentMode }),
       }),
 
-    editOrder: (orderId: number, dto: { items: { menuItemId: number; quantity: number }[]; notes?: string }) =>
+    editOrder: (orderId: number, dto: { items: { menuItemId: number; quantity: number }[]; notes?: string; editToken?: string }) =>
       request<{ success: boolean; data: Order; message: string }>(`api/Order/${orderId}/edit`, {
         method: 'PUT',
         body: JSON.stringify(dto),

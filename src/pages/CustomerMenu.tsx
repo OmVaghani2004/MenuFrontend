@@ -11,9 +11,13 @@ const fmt = (n: number) => `₹${n.toFixed(2)}`;
 const orderKey = (tableId?: number) => tableId != null ? `active_order_${tableId}` : null;
 
 export const CustomerMenu: React.FC = () => {
+  // QR codes now only carry an opaque ?token= — no raw IDs in the URL
   const p = new URLSearchParams(window.location.search);
-  const tableNumber = p.get('table') || '';
-  const tableId = p.get('tableId') ? parseInt(p.get('tableId')!) : undefined;
+  const qrToken = p.get('token') || '';
+
+  const [tableNumber, setTableNumber] = useState('');
+  const [tableId,     setTableId]     = useState<number | undefined>(undefined);
+  const [tokenError,  setTokenError]  = useState(false); // true = invalid/missing token
 
   const [categories,  setCategories]  = useState<Category[]>([]);
   const [allItems,    setAllItems]    = useState<MenuItem[]>([]);
@@ -25,18 +29,51 @@ export const CustomerMenu: React.FC = () => {
   const [notes,       setNotes]       = useState('');
   const [loading,     setLoading]     = useState(true);
   const [placing,     setPlacing]     = useState(false);
-  // ordered = brief success banner; orderId = persisted open-order reference
+  // orderId + editToken stored together: localStorage["active_order_{tableId}"] = "99:abc123"
   const [ordered,     setOrdered]     = useState(false);
-  const [orderId,     setOrderId]     = useState<number | null>(() => {
-    const key = orderKey(tableId);
-    return key ? Number(localStorage.getItem(key)) || null : null;
-  });
+  const [orderId,     setOrderId]     = useState<number | null>(null);
+  const [editToken,   setEditToken]   = useState<string | null>(null);
   const [error,       setError]       = useState('');
   const [restName,    setRestName]    = useState('Our Restaurant');
   const [openingHours, setOpeningHours] = useState('');
   const catRef = useRef<HTMLDivElement>(null);
 
+  // ── Step 1: resolve the QR token → get tableId + tableNumber ────────────────
   useEffect(() => {
+    if (!qrToken) {
+      setTokenError(true);
+      setLoading(false);
+      return;
+    }
+
+    api.tables.resolveToken(qrToken)
+      .then(res => {
+        if (!res.success || !res.data) {
+          setTokenError(true);
+          setLoading(false);
+          return;
+        }
+        const { tableId: tid, tableNumber: tnum } = res.data;
+        setTableId(tid);
+        setTableNumber(tnum);
+
+        // Restore orderId + editToken from localStorage once tableId is known
+        const stored = localStorage.getItem(orderKey(tid) ?? '');
+        if (stored) {
+          const [storedOrderId, storedEditToken] = stored.split(':');
+          if (storedOrderId) setOrderId(Number(storedOrderId));
+          if (storedEditToken) setEditToken(storedEditToken);
+        }
+      })
+      .catch(() => {
+        setTokenError(true);
+        setLoading(false);
+      });
+  }, [qrToken]);
+
+  // ── Step 2: load menu + restaurant info once tableId is resolved ─────────────
+  useEffect(() => {
+    if (tableId === undefined) return; // wait for resolve
     (async () => {
       try {
         setLoading(true);
@@ -69,7 +106,7 @@ export const CustomerMenu: React.FC = () => {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [tableId]);
 
   const add = (item: MenuItem) => {
     const img = item.images?.find(i => i.isPrimary)?.imageUrl ?? item.images?.[0]?.imageUrl;
@@ -91,9 +128,10 @@ export const CustomerMenu: React.FC = () => {
 
   /**
    * Single submission handler:
-   * – If an open orderId is stored → try editOrder (add to existing).
+   * – If an open orderId is stored → try editOrder (add to existing), sending the
+   *   editToken so the backend can verify the customer owns this order.
    * – Only falls back to placeOrder if the backend explicitly rejects because
-   *   the order is paid/cancelled. Any other error is shown to the user.
+   *   the order is paid/cancelled/forbidden. Any other error is shown to the user.
    */
   const submitCart = async () => {
     if (!cart.length) return;
@@ -102,11 +140,11 @@ export const CustomerMenu: React.FC = () => {
     const notesVal = notes.trim() || undefined;
 
     try {
-      // ── Path A: add items to the existing open order ──────────────────────────
+      // ── Path A: add items to the existing open order ─────────────────────────────────
       if (orderId) {
-        console.log('[CustomerMenu] editOrder → orderId:', orderId, 'items:', items);
         try {
-          await api.orders.editOrder(orderId, { items, notes: notesVal });
+          // Always send the editToken — the backend requires it for anonymous callers
+          await api.orders.editOrder(orderId, { items, notes: notesVal, editToken: editToken ?? undefined });
           setCart([]); setCartOpen(false); setNotes('');
           flashSuccess();
           return; // ← done, no placeOrder
@@ -115,27 +153,26 @@ export const CustomerMenu: React.FC = () => {
           console.warn('[CustomerMenu] editOrder failed:', msg);
 
           // Only clear & fall back when the backend says the order is closed.
-          // For any other error (network, server crash, etc.) surface it to the user.
+          // 403 / "unauthorised" means our token is wrong — show the error, don't silently retry.
           const orderClosed =
-            msg.toLowerCase().includes('paid') ||
-            msg.toLowerCase().includes('cancel') ||
+            msg.toLowerCase().includes('paid')    ||
+            msg.toLowerCase().includes('cancel')  ||
             msg.toLowerCase().includes('not found');
 
           if (!orderClosed) {
-            // Transient error — show it, keep orderId intact, let user retry
             setError(msg || 'Failed to add items. Please try again.');
             return;
           }
 
-          // Order is genuinely closed → clear stale id and fall through to new order
+          // Order genuinely closed → clear stale state and fall through to new order
           const key = orderKey(tableId);
           if (key) localStorage.removeItem(key);
           setOrderId(null);
+          setEditToken(null);
         }
       }
 
-      // ── Path B: place a brand-new order ──────────────────────────────────────
-      console.log('[CustomerMenu] placeOrder → new order for table:', tableId);
+      // ── Path B: place a brand-new order ───────────────────────────────────────
       const res = await api.orders.place({
         tableId: tableId ?? null,
         customerName: name.trim() || null,
@@ -144,13 +181,18 @@ export const CustomerMenu: React.FC = () => {
         items,
       });
 
-      const newId = res.data?.orderId ?? null;
-      console.log('[CustomerMenu] placeOrder response orderId:', newId);
+      const newId    = res.data?.orderId   ?? null;
+      const newToken = res.data?.editToken  ?? null;
+
       setOrderId(newId);
+      setEditToken(newToken);
+
+      // Persist both together: "orderId:editToken" so page refreshes keep ownership
       if (newId) {
         const key = orderKey(tableId);
-        if (key) localStorage.setItem(key, String(newId));
+        if (key) localStorage.setItem(key, `${newId}:${newToken ?? ''}`);
       }
+
       setCart([]); setCartOpen(false); setNotes('');
       flashSuccess();
     } catch (e: any) {
@@ -172,6 +214,21 @@ export const CustomerMenu: React.FC = () => {
     if (search && !item.foodName.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+
+  // ── INVALID / MISSING QR TOKEN ────────────────────────────────────────────
+  // Shown when the QR code URL has been tampered with or is missing ?token=
+  if (tokenError) return (
+    <div style={S.lightPage}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: 16, padding: 32, textAlign: 'center' }}>
+        <div style={{ fontSize: '4rem' }}>🚫</div>
+        <h1 style={{ fontSize: '1.8rem', fontWeight: 900, color: '#1a1a1a' }}>Invalid QR Code</h1>
+        <p style={{ color: '#666', fontSize: '1rem', maxWidth: 320 }}>
+          This QR code is no longer valid. Please scan the QR code on your table directly.
+        </p>
+        <p style={{ color: '#bbb', fontSize: '0.78rem' }}>If you believe this is an error, please ask your waiter for assistance.</p>
+      </div>
+    </div>
+  );
 
   // ── SUCCESS BANNER (auto-dismisses, no buttons, customer stays on the page) ──
   if (ordered) return (
